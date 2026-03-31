@@ -3243,7 +3243,20 @@ function generateTeams(){
   }
   var total = sizeA + sizeB;
 
-  var pool = state.players.filter(function(p){ return poolIds.includes(p.id); });
+    var pool = state.players.filter(function(p){ return poolIds.includes(p.id); });
+  // Fallback: if IDs don't match (e.g. after app reset), use all players
+  if(pool.length === 0 && state.players.length > 0){
+    console.log('[SR] ID mismatch — using all players. registered='+JSON.stringify(poolIds)+' players='+state.players.map(function(p){return p.id;}).join(','));
+    pool = [...state.players];
+    poolIds = pool.map(function(p){ return p.id; });
+    selectedTeamPlayers = poolIds;
+    // Re-suggest mode based on actual player count
+    var newMode = _suggestMode(pool.length);
+    state.teamMode = newMode;
+    parts = newMode.split('v');
+    sizeA = parseInt(parts[0]); sizeB = parseInt(parts[1]||parts[0]);
+    total = sizeA + sizeB;
+  }
 
   if(pool.length < total){
     showToast('⚠️ ' + pool.length + ' / ' + total + ' Spieler – zu wenige!', 'orange');
