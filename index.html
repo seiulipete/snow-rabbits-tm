@@ -3089,9 +3089,10 @@ function loadTeamSession(){
   var chipsEl = document.getElementById('teamPlayerChips');
   var suggestEl = document.getElementById('teamSuggestedMode');
 
-  if(infoEl && count > 0){
+  var showCount = registered.length > 0 ? registered.length : state.players.length;
+  if(infoEl && (sid || showCount > 0)){
     infoEl.style.display = 'block';
-    if(countEl) countEl.textContent = count;
+    if(countEl) countEl.textContent = showCount;
 
     // Auto-suggest mode based on player count
     var suggested = _suggestMode(count);
@@ -3198,17 +3199,27 @@ function setBalance(btn, balance){
 }
 
 function generateTeams(){
-  // Always sync pool with current dropdown selection before generating
-  loadTeamSession();
+  // Read registered players directly from session
+  var sid = document.getElementById('teamSessionSelect').value;
+  var sess = sid ? state.sessions.find(function(x){ return x.id===sid; }) : null;
+  var registered = sess ? (sess.registered||[]) : [];
+  console.log('[SR] generateTeams: sid='+sid+' sess='+(sess?sess.name:'null')+' registered='+JSON.stringify(registered)+' state.players='+state.players.length);
+  var poolIds = registered.length > 0 ? registered : state.players.map(function(p){ return p.id; });
+  selectedTeamPlayers = poolIds;
 
-  // Parse mode — supports even (NvN) and uneven (NvM)
+  // Auto-detect mode from player count if needed
+  var suggested = _suggestMode(poolIds.length);
+  if(!state.teamMode || state.teamMode === 'manual') state.teamMode = suggested;
   var parts = state.teamMode.split('v');
   var sizeA = parseInt(parts[0]);
   var sizeB = parseInt(parts[1] || parts[0]);
-  var total  = sizeA + sizeB;
-
-  // Direct filter: use selectedTeamPlayers (just set by loadTeamSession above)
-  var pool = state.players.filter(function(p){ return selectedTeamPlayers.includes(p.id); });
+  if(isNaN(sizeA)||isNaN(sizeB)){
+    state.teamMode = suggested;
+    parts = suggested.split('v');
+    sizeA = parseInt(parts[0]); sizeB = parseInt(parts[1]||parts[0]);
+  }
+  var total = sizeA + sizeB;
+  var pool = state.players.filter(function(p){ return poolIds.includes(p.id); });
 
   if(pool.length < total){
     showToast('⚠️ ' + pool.length + ' / ' + total + ' Spieler – zu wenige!', 'orange');
