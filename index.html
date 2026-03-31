@@ -3042,16 +3042,32 @@ function _getTeamPool(){
   return selectedTeamPlayers;
 }
 function renderTeamSection(){
-  const sel=document.getElementById('teamSessionSelect');
-  const prevSid=sel.value; // remember current selection before re-render
-  const now=new Date().toISOString().slice(0,10);
-  const up=state.sessions.filter(s=>s.date>=now).sort((a,b)=>a.date.localeCompare(b.date));
-  sel.innerHTML='<option value="">–</option>'+up.map(s=>`<option value="${s.id}">${s.date} · ${s.name}</option>`).join('');
-  // Restore previous selection if still valid
-  if(prevSid && sel.querySelector(`option[value="${prevSid}"]`)){
-    sel.value=prevSid;
+  var sel = document.getElementById('teamSessionSelect');
+  var prevSid = sel.value;
+  var now = new Date().toISOString().slice(0,10);
+  // Show ALL sessions (past + future) so admin can always use generator
+  var allSess = [...state.sessions].sort(function(a,b){ return b.date.localeCompare(a.date); });
+  sel.innerHTML = '<option value="">– Training wählen –</option>'
+    + allSess.map(function(s){
+        var isPast = s.date < now;
+        var label = (isPast ? '📁 ' : '📅 ') + s.date + ' · ' + s.name;
+        return '<option value="'+s.id+'">'+label+'</option>';
+      }).join('');
+  // Restore previous or auto-select nearest upcoming
+  if(prevSid && sel.querySelector('option[value="'+prevSid+'"]')){
+    sel.value = prevSid;
+  } else {
+    // Auto-select the next upcoming training (or most recent past)
+    var next = state.sessions
+      .filter(function(s){ return s.date >= now; })
+      .sort(function(a,b){ return a.date.localeCompare(b.date); })[0];
+    if(!next){
+      next = state.sessions
+        .sort(function(a,b){ return b.date.localeCompare(a.date); })[0];
+    }
+    if(next) sel.value = next.id;
   }
-  loadTeamSession(); // init pool with correct session
+  loadTeamSession();
 }
 function loadTeamSession(){
   var sid = document.getElementById('teamSessionSelect').value;
