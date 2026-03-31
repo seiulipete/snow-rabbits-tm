@@ -310,26 +310,33 @@ body.admin-mode .player-grid .admin-only{display:flex;}
 <!-- TEAMS -->
 <div class="section" id="section-teams">
   <div class="page-header"><div class="page-title">⚡ <span data-i18n="teamGenerator">Team-Generator</span></div></div>
-  <div class="alert info visible" style="margin-bottom:14px;" data-i18n="teamNoLogin">🎲 Jeder kann Teams auslosen – kein Login nötig!</div>
   <div class="card">
-    <div class="card-title">🎮 <span data-i18n="teamModeTitle">Modus &amp; Training</span></div>
-    <div class="grid-2">
-      <div class="form-group"><label data-i18n="chooseTraining">Training wählen</label><select id="teamSessionSelect" onchange="loadTeamSession()"><option value="">–</option></select></div>
-      <div class="form-group"><label data-i18n="gameMode">Spielmodus</label><div class="skill-selector">
-        <button class="skill-btn" onclick="setMode(this,'3v3')">3v3</button>
-        <button class="skill-btn active" onclick="setMode(this,'4v4')">4v4</button>
-        <button class="skill-btn" onclick="setMode(this,'5v5')">5v5</button>
-        <button class="skill-btn" onclick="setMode(this,'4v3')">4v3</button>
-        <button class="skill-btn" onclick="setMode(this,'5v4')">5v4</button>
-        <button class="skill-btn" onclick="setMode(this,'manual')">✋ Manuell</button>
-      </div></div>
+    <div class="card-title">🎮 Training &amp; Modus</div>
+    <div class="form-group">
+      <label data-i18n="chooseTraining">Training wählen</label>
+      <select id="teamSessionSelect" onchange="loadTeamSession()" style="width:100%;"></select>
     </div>
-    <div class="form-group"><label data-i18n="balanceLabel">Balance</label><div class="skill-selector">
-      <button class="skill-btn active" onclick="setBalance(this,'smart')">🧠 Smart</button>
-      <button class="skill-btn" onclick="setBalance(this,'random')">🎲 Zufall</button>
-    </div></div>
-    <div id="teamPlayerPool" style="margin-bottom:14px;font-size:13px;color:var(--text2);"></div>
-    <button class="btn btn-primary" onclick="generateTeams()" style="font-size:16px;padding:12px 28px;">🎲 Teams auslosen!</button>
+    <!-- Auto-detected player count + suggested mode -->
+    <div id="teamPlayerInfo" style="display:none;background:var(--surface);border-radius:10px;padding:12px 16px;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <div>
+          <span id="teamPlayerCount" style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:800;color:var(--accent);">0</span>
+          <span style="font-size:13px;color:var(--text2);margin-left:6px;">angemeldete Spieler</span>
+        </div>
+        <div id="teamSuggestedMode" style="font-size:13px;color:var(--accent3);font-weight:600;"></div>
+      </div>
+      <div id="teamPlayerChips" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;"></div>
+    </div>
+    <!-- Mode selection: only Smart / Zufall / Manuell -->
+    <div class="form-group">
+      <label>Auslosen</label>
+      <div class="skill-selector">
+        <button class="skill-btn active" id="balBtn-smart" onclick="setBalance(this,'smart')">🧠 Smart</button>
+        <button class="skill-btn" id="balBtn-random" onclick="setBalance(this,'random')">🎲 Zufall</button>
+        <button class="skill-btn" id="balBtn-manual" onclick="setBalance(this,'manual')">✋ Manuell</button>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="generateBtn" onclick="generateTeams()" style="font-size:16px;padding:12px 28px;width:100%;margin-top:4px;">🎲 Teams auslosen!</button>
   </div>
   <div id="teamResult" style="display:none;">
     <div class="card">
@@ -347,11 +354,8 @@ body.admin-mode .player-grid .admin-only{display:flex;}
       </div>
       <div id="teamConfirmStatus" style="margin-top:10px;font-size:13px;color:var(--text2);"></div>
     </div>
-  </div>
-</div>
-
 <!-- MANUAL TEAM BUILDER -->
-<div id="manualTeamSection" style="display:none;" class="card" style="margin-top:16px;">
+<div id="manualTeamSection" style="display:none;margin-top:16px;" class="card">
   <div class="card-title">✋ Manuelle Teamzusammenstellung</div>
   <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Ziehe Spieler in Team Alpha oder Team Beta.</p>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
@@ -373,6 +377,11 @@ body.admin-mode .player-grid .admin-only{display:flex;}
     <button class="btn btn-secondary" onclick="resetManualTeams()">↩️ Zurücksetzen</button>
   </div>
 </div>
+
+  </div>
+</div>
+
+
 
 
 <!-- STATS -->
@@ -2840,11 +2849,15 @@ function openScoreModal(sid){
   document.getElementById('scoreA').value=0;
   document.getElementById('scoreB').value=0;
   document.getElementById('scoreNote').value='';
-  document.getElementById('scoreLineupA').value='[]';
-  document.getElementById('scoreLineupB').value='[]';
+  // Pre-fill lineup from confirmedLineup if available
+  var clA = s.confirmedLineup ? JSON.stringify(s.confirmedLineup.teamA) : '[]';
+  var clB = s.confirmedLineup ? JSON.stringify(s.confirmedLineup.teamB) : '[]';
+  document.getElementById('scoreLineupA').value = clA;
+  document.getElementById('scoreLineupB').value = clB;
   lineupMap={};
   const reg=s.registered||[];
-  const players=state.players.filter(p=>reg.includes(p.id));
+  const players=state.players.filter(p=>reg.includes(p.id)||
+    (s.confirmedLineup&&(s.confirmedLineup.teamA||[]).concat(s.confirmedLineup.teamB||[]).includes(p.id)));
   const wrap=document.getElementById('lineupPickerWrap');
   wrap.innerHTML=players.length?`
     <p style="font-size:12px;color:var(--text2);margin:10px 0 6px;">Klick: einmal = ⚪ Alpha, nochmal = 🔵 Beta, nochmal = keine Zuweisung</p>
@@ -3021,18 +3034,124 @@ function playerScore(p){
 }
 
 let selectedTeamPlayers=[];
+// Lazy-init: returns all player IDs if not yet set
+function _getTeamPool(){
+  if(selectedTeamPlayers.length === 0 && state.players.length > 0){
+    return state.players.map(function(p){ return p.id; });
+  }
+  return selectedTeamPlayers;
+}
 function renderTeamSection(){
   const sel=document.getElementById('teamSessionSelect');
+  const prevSid=sel.value; // remember current selection before re-render
   const now=new Date().toISOString().slice(0,10);
   const up=state.sessions.filter(s=>s.date>=now).sort((a,b)=>a.date.localeCompare(b.date));
   sel.innerHTML='<option value="">–</option>'+up.map(s=>`<option value="${s.id}">${s.date} · ${s.name}</option>`).join('');
-  loadTeamSession();
+  // Restore previous selection if still valid
+  if(prevSid && sel.querySelector(`option[value="${prevSid}"]`)){
+    sel.value=prevSid;
+  }
+  loadTeamSession(); // init pool with correct session
 }
 function loadTeamSession(){
-  const sid=document.getElementById('teamSessionSelect').value;
-  selectedTeamPlayers=sid?[...(state.sessions.find(x=>x.id===sid)?.registered||[])]:state.players.map(p=>p.id);
-  document.getElementById('teamPlayerPool').textContent=
-    state.players.filter(p=>selectedTeamPlayers.includes(p.id)).length+' '+t('registered');
+  var sid = document.getElementById('teamSessionSelect').value;
+  var sess = sid ? state.sessions.find(function(x){ return x.id===sid; }) : null;
+  var registered = sess ? (sess.registered||[]) : [];
+
+  // Pool: registered players if any, else all players
+  if(registered.length > 0){
+    selectedTeamPlayers = [...registered];
+  } else {
+    selectedTeamPlayers = state.players.map(function(p){ return p.id; });
+  }
+
+  var count = state.players.filter(function(p){ return selectedTeamPlayers.includes(p.id); }).length;
+
+  // Update player info panel
+  var infoEl = document.getElementById('teamPlayerInfo');
+  var countEl = document.getElementById('teamPlayerCount');
+  var chipsEl = document.getElementById('teamPlayerChips');
+  var suggestEl = document.getElementById('teamSuggestedMode');
+
+  if(infoEl && count > 0){
+    infoEl.style.display = 'block';
+    if(countEl) countEl.textContent = count;
+
+    // Auto-suggest mode based on player count
+    var suggested = _suggestMode(count);
+    state.teamMode = suggested;
+    if(suggestEl){
+      var modeLabel = suggested === 'manual' ? '✋ Manuell' : '⚡ Vorgeschlagen: ' + suggested;
+      suggestEl.textContent = modeLabel;
+    }
+
+    // Show player chips
+    if(chipsEl){
+      var players = state.players.filter(function(p){ return selectedTeamPlayers.includes(p.id); });
+      chipsEl.innerHTML = players.map(function(p){
+        return '<span style="display:inline-flex;align-items:center;gap:5px;background:var(--surface2);border:1px solid var(--border);border-radius:16px;padding:3px 10px 3px 6px;font-size:12px;">'
+          + (p.photo ? '<img src="'+p.photo+'" style="width:18px;height:18px;border-radius:50%;object-fit:cover;">' : '<span style="display:inline-flex;width:18px;height:18px;border-radius:50%;background:var(--accent);align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#000;">'+p.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2)+'</span>')
+          + '<span>'+(p.nick||p.name.split(' ')[0])+'</span></span>';
+      }).join('');
+    }
+
+    // If confirmed lineup exists, show it
+    if(sess && sess.confirmedLineup){
+      _showConfirmedLineup(sess);
+    } else {
+      // Hide old result
+      var tr = document.getElementById('teamResult');
+      if(tr) tr.style.display = 'none';
+      var cs = document.getElementById('teamConfirmStatus');
+      if(cs) cs.innerHTML = '';
+    }
+
+    // If manual mode, open manual builder
+    if(suggested === 'manual' || state.teamBalance === 'manual'){
+      var manSec = document.getElementById('manualTeamSection');
+      if(manSec){ manSec.style.display='block'; _manualTeams={a:[],b:[],unassigned:[]}; _renderManualPool(); }
+    }
+  } else if(infoEl){
+    infoEl.style.display = 'none';
+  }
+}
+
+function _suggestMode(count){
+  // Best even/uneven split suggestions
+  if(count >= 10) return '5v5';
+  if(count === 9)  return '5v4';
+  if(count === 8)  return '4v4';
+  if(count === 7)  return '4v3';
+  if(count === 6)  return '3v3';
+  if(count === 5)  return '3v2';
+  if(count <= 4)   return 'manual';
+  return '4v4';
+}
+
+function _showConfirmedLineup(sess){
+  if(!sess || !sess.confirmedLineup) return;
+  var cl = sess.confirmedLineup;
+  var nameOf = function(id){ var p=state.players.find(function(x){return x.id===id;}); return p?(p.nick||p.name.split(' ')[0]):'?'; };
+  var tA = cl.teamA.map(nameOf).join(', ');
+  var tB = cl.teamB.map(nameOf).join(', ');
+  var statusEl = document.getElementById('teamConfirmStatus');
+  if(statusEl){
+    window._currentConfirmSessId = sess.id;
+    var changeBtn = canManage()
+      ? '<button class="btn btn-orange btn-sm" style="margin-top:8px;" onclick="clearConfirmedLineup(window._currentConfirmSessId)">✏️ Ändern</button>'
+      : '';
+    statusEl.innerHTML = '<div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.3);border-radius:8px;padding:10px 14px;font-size:13px;margin-top:10px;">'
+      + '<div style="color:var(--accent3);font-weight:700;margin-bottom:6px;">✅ Bestätigte Aufstellung · '+new Date(cl.confirmedAt).toLocaleDateString('de-DE')+'</div>'
+      + '<div style="color:var(--text2);">⚪ Alpha: '+tA+'</div>'
+      + '<div style="color:var(--text2);margin-top:3px;">🔵 Beta: '+tB+'</div>'
+      + changeBtn
+      + '</div>';
+  }
+  window._lastTeamA = cl.teamA.map(function(id){ return state.players.find(function(p){return p.id===id;}); }).filter(Boolean);
+  window._lastTeamB = cl.teamB.map(function(id){ return state.players.find(function(p){return p.id===id;}); }).filter(Boolean);
+  if(window._lastTeamA.length || window._lastTeamB.length){
+    _renderTeamResult(window._lastTeamA, window._lastTeamB, true);
+  }
 }
 function setMode(btn,mode){
   document.querySelectorAll('.skill-selector .skill-btn').forEach(b=>b.classList.remove('active'));
@@ -3046,23 +3165,40 @@ function setMode(btn,mode){
     if(manualSec) manualSec.style.display='none';
   }
 }
-function setBalance(btn,balance){
-  const btns=btn.parentElement.querySelectorAll('.skill-btn');
-  btns.forEach(b=>b.classList.remove('active')); btn.classList.add('active');
-  state.teamBalance=balance;
+function setBalance(btn, balance){
+  var btns = btn.parentElement.querySelectorAll('.skill-btn');
+  btns.forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  state.teamBalance = balance;
+  var manSec = document.getElementById('manualTeamSection');
+  var genBtn  = document.getElementById('generateBtn');
+  if(balance === 'manual'){
+    if(manSec){ manSec.style.display='block'; _manualTeams={a:[],b:[],unassigned:[]}; _renderManualPool(); }
+    if(genBtn) genBtn.style.display='none';
+  } else {
+    if(manSec) manSec.style.display='none';
+    if(genBtn) genBtn.style.display='';
+  }
 }
 
 function generateTeams(){
+  // Always sync pool with current dropdown selection before generating
+  loadTeamSession();
+
   // Parse mode — supports even (NvN) and uneven (NvM)
   var parts = state.teamMode.split('v');
   var sizeA = parseInt(parts[0]);
   var sizeB = parseInt(parts[1] || parts[0]);
   var total  = sizeA + sizeB;
 
+  // Direct filter: use selectedTeamPlayers (just set by loadTeamSession above)
   var pool = state.players.filter(function(p){ return selectedTeamPlayers.includes(p.id); });
 
   if(pool.length < total){
     showToast('⚠️ ' + pool.length + ' / ' + total + ' Spieler – zu wenige!', 'orange');
+    // Hide stale result panel to avoid showing NaN
+    var tr = document.getElementById('teamResult');
+    if(tr) tr.style.display = 'none';
     return;
   }
   // If more players than needed, trim to best-fitting pool
@@ -3097,56 +3233,11 @@ function generateTeams(){
     }
   }
 
-  window._lastTeamA = teamA;
+    window._lastTeamA = teamA;
   window._lastTeamB = teamB;
-
-  var scoreA = teamA.reduce(function(s,p){ return s+(p.overall||50); },0);
-  var scoreB = teamB.reduce(function(s,p){ return s+(p.overall||50); },0);
-  var avg    = function(t){ return t.length ? Math.round(t.reduce(function(s,p){return s+(p.overall||50);},0)/t.length) : 0; };
-
-  var nameA = t('teamAlpha') || 'Team Alpha';
-  var nameB = t('teamBeta')  || 'Team Beta';
-
-  document.querySelector('.team-header').textContent = '⚪ ' + nameA;
-  var headers = document.querySelectorAll('.team-header');
-  if(headers[0]) headers[0].textContent = '⚪ ' + nameA;
-  if(headers[1]) headers[1].textContent = '🔵 ' + nameB;
-
-  var listA = document.getElementById('teamAList');
-  var listB = document.getElementById('teamBList');
-  if(listA) listA.innerHTML = teamA.map(function(p){
-    return '<div class="player-tag" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">'
-      + (p.photo ? '<img src="'+p.photo+'" style="width:28px;height:28px;border-radius:50%;object-fit:cover;">' : '<span style="display:inline-flex;width:28px;height:28px;border-radius:50%;background:var(--accent);align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#000;">'+p.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2)+'</span>')
-      + '<div><div style="font-size:13px;font-weight:600;">'+(p.nick||p.name)+'</div>'
-      + '<div style="font-size:11px;color:var(--text3);">OVR '+( p.overall||calcOverall(p))+'</div></div>'
-      + '</div>';
-  }).join('');
-  if(listB) listB.innerHTML = teamB.map(function(p){
-    return '<div class="player-tag" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">'
-      + (p.photo ? '<img src="'+p.photo+'" style="width:28px;height:28px;border-radius:50%;object-fit:cover;">' : '<span style="display:inline-flex;width:28px;height:28px;border-radius:50%;background:var(--accent2);align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;">'+p.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2)+'</span>')
-      + '<div><div style="font-size:13px;font-weight:600;">'+(p.nick||p.name)+'</div>'
-      + '<div style="font-size:11px;color:var(--text3);">OVR '+(p.overall||calcOverall(p))+'</div></div>'
-      + '</div>';
-  }).join('');
-
-  var scoreEl = document.getElementById('teamAScore');
-  var scoreBEl = document.getElementById('teamBScore');
-  if(scoreEl)  scoreEl.textContent  = 'Ø OVR ' + avg(teamA);
-  if(scoreBEl) scoreBEl.textContent = 'Ø OVR ' + avg(teamB);
-
-  var balInfo = document.getElementById('teamBalanceInfo');
-  if(balInfo){
-    var diff = Math.abs(scoreA - scoreB);
-    balInfo.innerHTML = '<span style="font-size:12px;color:var(--text2);">'
-      + sizeA + ' vs ' + sizeB + ' · '
-      + (diff === 0 ? '⚖️ Perfekt ausgeglichen' : diff <= 15 ? '✅ Gut ausgeglichen' : '⚠️ Differenz: ' + diff)
-      + '</span>';
-  }
-
-  document.getElementById('teamResult').style.display = 'block';
-  // Reset confirm status
-  var statusEl = document.getElementById('teamConfirmStatus');
-  if(statusEl) statusEl.innerHTML = '';
+  _renderTeamResult(teamA, teamB, false);
+  var statusEl2 = document.getElementById('teamConfirmStatus');
+  if(statusEl2) statusEl2.innerHTML = '';
 }
 function copyTeams(){
   const aList=document.getElementById('teamAList').querySelectorAll('.team-player');
@@ -3368,6 +3459,12 @@ function confirmTeamLineup(){
     regenBtn.style.opacity = '0.4';
   }
 
+  // Also pre-fill the score modal lineup for this session
+  var scoreLineupAEl = document.getElementById('scoreLineupA');
+  var scoreLineupBEl = document.getElementById('scoreLineupB');
+  if(scoreLineupAEl) scoreLineupAEl.value = JSON.stringify(teamAIds);
+  if(scoreLineupBEl) scoreLineupBEl.value = JSON.stringify(teamBIds);
+
   showToast(t('teamConfirmed'));
 }
 
@@ -3523,7 +3620,7 @@ setInterval(_updateSessionBadge, 60000); // update every minute
 var _manualTeams = { a: [], b: [], unassigned: [] };
 
 function _renderManualPool(){
-  var pool = state.players.filter(function(p){ return selectedTeamPlayers.includes(p.id); });
+  var pool = state.players.filter(function(p){ return _getTeamPool().includes(p.id); });
   if(_manualTeams.a.length === 0 && _manualTeams.b.length === 0 && _manualTeams.unassigned.length === 0){
     _manualTeams.unassigned = pool.map(function(p){ return p.id; });
   }
@@ -3588,11 +3685,63 @@ function confirmManualTeams(){
   }).join('');
   var balInfo = document.getElementById('teamBalanceInfo');
   if(balInfo) balInfo.innerHTML = '<span style="font-size:12px;color:var(--text2);">✋ Manuell erstellt · '+teamA.length+' vs '+teamB.length+'</span>';
-  document.getElementById('teamResult').style.display = 'block';
+  _renderTeamResult(teamA, teamB, false);
   document.getElementById('manualTeamSection').style.display = 'none';
+  var statusEl = document.getElementById('teamConfirmStatus');
+  if(statusEl) statusEl.innerHTML = '';
   showToast('✅ Teams übernommen!', 'green');
 }
 
+
+
+// ── Shared team result renderer ───────────────────────────────────────────────
+function _renderTeamResult(teamA, teamB, isConfirmed){
+  var sizeA = teamA.length, sizeB = teamB.length;
+  var avg = function(t){ return t.length ? Math.round(t.reduce(function(s,p){return s+(p.overall||calcOverall(p));},0)/t.length) : 0; };
+  var scoreA = teamA.reduce(function(s,p){return s+(p.overall||0);},0);
+  var scoreB = teamB.reduce(function(s,p){return s+(p.overall||0);},0);
+  var diff = Math.abs(scoreA - scoreB);
+
+  function playerCard(p, bgColor){
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">'
+      + (p.photo ? '<img src="'+p.photo+'" style="width:28px;height:28px;border-radius:50%;object-fit:cover;">'
+        : '<span style="display:inline-flex;width:28px;height:28px;border-radius:50%;background:'+bgColor+';align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#000;">'+p.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2)+'</span>')
+      + '<div><div style="font-size:13px;font-weight:600;">'+(p.nick||p.name)+'</div>'
+      + '<div style="font-size:11px;color:var(--text3);">OVR '+(p.overall||calcOverall(p))+'</div></div></div>';
+  }
+
+  var listA = document.getElementById('teamAList');
+  var listB = document.getElementById('teamBList');
+  if(listA) listA.innerHTML = teamA.map(function(p){return playerCard(p,'var(--accent)');}).join('');
+  if(listB) listB.innerHTML = teamB.map(function(p){return playerCard(p,'var(--accent2)');}).join('');
+
+  var scoreEl = document.getElementById('teamAScore');
+  var scoreBEl = document.getElementById('teamBScore');
+  if(scoreEl)  scoreEl.textContent = 'Ø OVR ' + avg(teamA);
+  if(scoreBEl) scoreBEl.textContent = 'Ø OVR ' + avg(teamB);
+
+  var balInfo = document.getElementById('teamBalanceInfo');
+  if(balInfo){
+    balInfo.innerHTML = '<span style="font-size:12px;color:var(--text2);">'
+      + sizeA + ' vs ' + sizeB
+      + (isConfirmed ? ' · ✅ Bestätigt' : diff === 0 ? ' · ⚖️ Perfekt ausgeglichen' : diff <= 15 ? ' · ✅ Gut ausgeglichen' : ' · ⚠️ Diff: '+diff)
+      + '</span>';
+  }
+
+  // Show/hide confirm button based on login
+  var confirmBtn = document.getElementById('confirmTeamBtn');
+  if(confirmBtn) confirmBtn.style.display = isConfirmed && !canManage() ? 'none' : '';
+
+  // Lock regen for non-admins when confirmed
+  var regenBtn = document.querySelector('#teamResult .btn-primary');
+  if(regenBtn && isConfirmed && !canManage()){
+    regenBtn.disabled = true; regenBtn.style.opacity='0.4'; regenBtn.title = t('teamEditHint');
+  } else if(regenBtn){
+    regenBtn.disabled = false; regenBtn.style.opacity='1';
+  }
+
+  document.getElementById('teamResult').style.display = 'block';
+}
 
 // ── RENDER ALL ────────────────────────────────────────────────
 
