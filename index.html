@@ -321,6 +321,7 @@ body.admin-mode .player-grid .admin-only{display:flex;}
         <button class="skill-btn" onclick="setMode(this,'5v5')">5v5</button>
         <button class="skill-btn" onclick="setMode(this,'4v3')">4v3</button>
         <button class="skill-btn" onclick="setMode(this,'5v4')">5v4</button>
+        <button class="skill-btn" onclick="setMode(this,'manual')">✋ Manuell</button>
       </div></div>
     </div>
     <div class="form-group"><label data-i18n="balanceLabel">Balance</label><div class="skill-selector">
@@ -348,6 +349,31 @@ body.admin-mode .player-grid .admin-only{display:flex;}
     </div>
   </div>
 </div>
+
+<!-- MANUAL TEAM BUILDER -->
+<div id="manualTeamSection" style="display:none;" class="card" style="margin-top:16px;">
+  <div class="card-title">✋ Manuelle Teamzusammenstellung</div>
+  <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Ziehe Spieler in Team Alpha oder Team Beta.</p>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:16px;margin-bottom:8px;color:var(--text);">⚪ Team Alpha</div>
+      <div id="manualPoolA" style="min-height:80px;background:var(--surface2);border-radius:8px;padding:8px;"></div>
+    </div>
+    <div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:16px;margin-bottom:8px;color:var(--accent2);">🔵 Team Beta</div>
+      <div id="manualPoolB" style="min-height:80px;background:var(--surface2);border-radius:8px;padding:8px;"></div>
+    </div>
+  </div>
+  <div style="margin-top:10px;">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:14px;margin-bottom:6px;color:var(--text3);">NICHT ZUGETEILT</div>
+    <div id="manualPoolUnassigned" style="min-height:48px;background:var(--surface2);border-radius:8px;padding:8px;display:flex;flex-wrap:wrap;gap:6px;"></div>
+  </div>
+  <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
+    <button class="btn btn-green" onclick="confirmManualTeams()">✅ Teams übernehmen</button>
+    <button class="btn btn-secondary" onclick="resetManualTeams()">↩️ Zurücksetzen</button>
+  </div>
+</div>
+
 
 <!-- STATS -->
 <div class="section" id="section-stats">
@@ -2704,17 +2730,44 @@ function renderSessionItem(s,dn){
   const pgBadge=`<span class="playground-badge ${pg}">${pg==='indoor'?'🏠 Indoor':'🌳 Outdoor'}</span>`;
   const tags=(s.filterTags||[]).map(fid=>{const f=state.filters.find(x=>x.id===fid);return f?`<span class="filter-chip" style="padding:2px 8px;cursor:default;font-size:11px;">${f.name}</span>`:''}).join('');
   const nameOf=id=>{const p=state.players.find(x=>x.id===id);return p?(p.nick||p.name.split(' ')[0]):'?';};
-  const scoreHtml=(s.scores||[]).map(sc=>{
-    const w=sc.a>sc.b?'⚪':sc.b>sc.a?'🔵':'🤝';
-    const laA=(sc.lineupA||[]).map(nameOf).join(', ');
-    const laB=(sc.lineupB||[]).map(nameOf).join(', ');
-    return `<div style="margin-top:6px;padding:8px;background:var(--surface);border-radius:8px;">
+  // Determine which score to display
+  // finalScoreIdx = index of the chosen final result (-1 = none set, show latest)
+  const allScores = s.scores || [];
+  const finalIdx = (s.finalScoreIdx !== undefined && s.finalScoreIdx !== null)
+    ? s.finalScoreIdx
+    : (allScores.length > 0 ? allScores.length - 1 : -1);
+  const isStaff = canManage(); // admin or mod
+
+  // Build score HTML
+  var scoreHtml = '';
+  if(allScores.length === 0){
+    scoreHtml = '';
+  } else if(!isStaff){
+    // Non-staff: only show the final score
+    const sc = allScores[finalIdx] || allScores[allScores.length - 1];
+    const w = sc.a>sc.b?'⚪':sc.b>sc.a?'🔵':'🤝';
+    const laA = (sc.lineupA||[]).map(nameOf).join(', ');
+    const laB = (sc.lineupB||[]).map(nameOf).join(', ');
+    scoreHtml = `<div style="margin-top:6px;padding:8px;background:var(--surface);border-radius:8px;">
       <div style="font-size:13px;">${w} <strong style="font-family:Barlow Condensed,sans-serif;font-size:16px;color:var(--text);">${sc.a} : ${sc.b}</strong>${sc.note?` · <span style="color:var(--text3);font-size:12px;">${sc.note}</span>`:''}</div>
-      ${laA||laB?`<div style="font-size:11px;color:var(--text3);margin-top:3px;display:flex;gap:12px;flex-wrap:wrap;">
-        ${laA?`<span>⚪ <em>${laA}</em></span>`:''}${laB?`<span>🔵 <em>${laB}</em></span>`:''}
-      </div>`:''}
+      ${laA||laB?`<div style="font-size:11px;color:var(--text3);margin-top:3px;display:flex;gap:12px;flex-wrap:wrap;">${laA?`<span>⚪ <em>${laA}</em></span>`:''}${laB?`<span>🔵 <em>${laB}</em></span>`:''}</div>`:''}
     </div>`;
-  }).join('');
+  } else {
+    // Staff: show all scores, highlight final, allow picking
+    scoreHtml = allScores.map(function(sc, scIdx){
+      const isFinal = scIdx === finalIdx;
+      const w = sc.a>sc.b?'⚪':sc.b>sc.a?'🔵':'🤝';
+      const laA = (sc.lineupA||[]).map(nameOf).join(', ');
+      const laB = (sc.lineupB||[]).map(nameOf).join(', ');
+      const border = isFinal ? 'border:2px solid var(--accent3);' : 'border:1px solid var(--border);opacity:0.6;';
+      const finalBadge = isFinal ? '<span style="font-size:10px;background:var(--accent3);color:#000;padding:1px 6px;border-radius:4px;margin-left:6px;font-weight:700;">FINAL</span>' : '';
+      const setBtn = !isFinal ? `<button onclick="setFinalScore('${s.id}',${scIdx})" style="font-size:10px;padding:2px 7px;margin-left:8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;cursor:pointer;color:var(--text2);">✅ Als Endergebnis</button>` : '';
+      return `<div style="margin-top:6px;padding:8px;background:var(--surface);border-radius:8px;${border}">
+        <div style="font-size:13px;">${w} <strong style="font-family:Barlow Condensed,sans-serif;font-size:16px;color:var(--text);">${sc.a} : ${sc.b}</strong>${finalBadge}${setBtn}${sc.note?` · <span style="color:var(--text3);font-size:12px;">${sc.note}</span>`:''}</div>
+        ${laA||laB?`<div style="font-size:11px;color:var(--text3);margin-top:3px;display:flex;gap:12px;flex-wrap:wrap;">${laA?`<span>⚪ <em>${laA}</em></span>`:''}${laB?`<span>🔵 <em>${laB}</em></span>`:''}</div>`:''}
+      </div>`;
+    }).join('');
+  };
   const isPast=s.date<now;
   return `<div class="session-item">
     <div class="session-date">${dateStr}</div>
@@ -2818,6 +2871,16 @@ function cycleLineup(pid){
   document.getElementById('scoreLineupA').value=JSON.stringify(Object.entries(lineupMap).filter(([,v])=>v==='A').map(([k])=>k));
   document.getElementById('scoreLineupB').value=JSON.stringify(Object.entries(lineupMap).filter(([,v])=>v==='B').map(([k])=>k));
 }
+
+function setFinalScore(sessionId, scoreIdx){
+  var s = state.sessions.find(function(x){ return x.id === sessionId; });
+  if(!s) return;
+  s.finalScoreIdx = scoreIdx;
+  saveAll();
+  renderSessions();
+  showToast('✅ Endergebnis gesetzt!', 'green');
+}
+
 function saveScore(){
   const sid=document.getElementById('scoreSessionId').value;
   const s=state.sessions.find(x=>x.id===sid);
@@ -2974,6 +3037,14 @@ function loadTeamSession(){
 function setMode(btn,mode){
   document.querySelectorAll('.skill-selector .skill-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active'); state.teamMode=mode;
+  var manualSec = document.getElementById('manualTeamSection');
+  var teamResult = document.getElementById('teamResult');
+  if(mode === 'manual'){
+    if(manualSec){ manualSec.style.display='block'; _renderManualPool(); }
+    if(teamResult) teamResult.style.display='none';
+  } else {
+    if(manualSec) manualSec.style.display='none';
+  }
 }
 function setBalance(btn,balance){
   const btns=btn.parentElement.querySelectorAll('.skill-btn');
@@ -3445,6 +3516,82 @@ function _updateSessionBadge(){
   badge.title = 'Admin · Session läuft ab in ' + h + 'h ' + (m<10?'0':'')+m + 'min';
 }
 setInterval(_updateSessionBadge, 60000); // update every minute
+
+
+
+// ── MANUAL TEAM MODE ─────────────────────────────────────────────────────────
+var _manualTeams = { a: [], b: [], unassigned: [] };
+
+function _renderManualPool(){
+  var pool = state.players.filter(function(p){ return selectedTeamPlayers.includes(p.id); });
+  if(_manualTeams.a.length === 0 && _manualTeams.b.length === 0 && _manualTeams.unassigned.length === 0){
+    _manualTeams.unassigned = pool.map(function(p){ return p.id; });
+  }
+  function initials(p){ return p.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2); }
+  function avatar(p){
+    if(p.photo) return '<img src="'+p.photo+'" style="width:22px;height:22px;border-radius:50%;object-fit:cover;">';
+    return '<span style="display:inline-flex;width:22px;height:22px;border-radius:50%;background:var(--accent);align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#000;">'+initials(p)+'</span>';
+  }
+  function renderSlot(containerId, ids, teamKey){
+    var el = document.getElementById(containerId);
+    if(!el) return;
+    var html = '';
+    ids.forEach(function(pid){
+      var p = state.players.find(function(x){ return x.id === pid; });
+      if(!p) return;
+      html += '<div data-pid="'+pid+'" data-team="'+teamKey+'" style="display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px 10px 4px 6px;margin:3px;cursor:pointer;" onclick="_manualMoveEl(this)">'
+        + avatar(p)
+        + '<span style="font-size:12px;font-weight:600;">'+(p.nick||p.name.split(' ')[0])+'</span>'
+        + '</div>';
+    });
+    el.innerHTML = html;
+  }
+  renderSlot('manualPoolA', _manualTeams.a, 'a');
+  renderSlot('manualPoolB', _manualTeams.b, 'b');
+  renderSlot('manualPoolUnassigned', _manualTeams.unassigned, 'u');
+}
+
+function _manualMoveEl(el){
+  var pid = el.getAttribute('data-pid');
+  var fromKey = el.getAttribute('data-team');
+  _manualMove(pid, fromKey);
+}
+function _manualMove(pid, fromKey){
+  // Cycle: unassigned → A → B → unassigned
+  var from = fromKey === 'a' ? _manualTeams.a : fromKey === 'b' ? _manualTeams.b : _manualTeams.unassigned;
+  from.splice(from.indexOf(pid), 1);
+  if(fromKey === 'u'){ _manualTeams.a.push(pid); }
+  else if(fromKey === 'a'){ _manualTeams.b.push(pid); }
+  else { _manualTeams.unassigned.push(pid); }
+  _renderManualPool();
+}
+
+function resetManualTeams(){
+  _manualTeams = { a: [], b: [], unassigned: [] };
+  _renderManualPool();
+}
+
+function confirmManualTeams(){
+  var teamA = state.players.filter(function(p){ return _manualTeams.a.includes(p.id); });
+  var teamB = state.players.filter(function(p){ return _manualTeams.b.includes(p.id); });
+  if(teamA.length === 0 && teamB.length === 0){ showToast('⚠️ Noch keine Spieler zugeteilt!','orange'); return; }
+  window._lastTeamA = teamA;
+  window._lastTeamB = teamB;
+  // Show in teamResult
+  var listA = document.getElementById('teamAList');
+  var listB = document.getElementById('teamBList');
+  if(listA) listA.innerHTML = teamA.map(function(p){
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">'+(p.photo?'<img src="'+p.photo+'" style="width:28px;height:28px;border-radius:50%;object-fit:cover;">':'<span style="display:inline-flex;width:28px;height:28px;border-radius:50%;background:var(--accent);align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#000;">'+p.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2)+'</span>')+'<div><div style="font-size:13px;font-weight:600;">'+(p.nick||p.name)+'</div><div style="font-size:11px;color:var(--text3);">OVR '+(p.overall||calcOverall(p))+'</div></div></div>';
+  }).join('');
+  if(listB) listB.innerHTML = teamB.map(function(p){
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">'+(p.photo?'<img src="'+p.photo+'" style="width:28px;height:28px;border-radius:50%;object-fit:cover;">':'<span style="display:inline-flex;width:28px;height:28px;border-radius:50%;background:var(--accent2);align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;">'+p.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2)+'</span>')+'<div><div style="font-size:13px;font-weight:600;">'+(p.nick||p.name)+'</div><div style="font-size:11px;color:var(--text3);">OVR '+(p.overall||calcOverall(p))+'</div></div></div>';
+  }).join('');
+  var balInfo = document.getElementById('teamBalanceInfo');
+  if(balInfo) balInfo.innerHTML = '<span style="font-size:12px;color:var(--text2);">✋ Manuell erstellt · '+teamA.length+' vs '+teamB.length+'</span>';
+  document.getElementById('teamResult').style.display = 'block';
+  document.getElementById('manualTeamSection').style.display = 'none';
+  showToast('✅ Teams übernommen!', 'green');
+}
 
 
 // ── RENDER ALL ────────────────────────────────────────────────
