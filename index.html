@@ -3070,66 +3070,82 @@ function renderTeamSection(){
   loadTeamSession();
 }
 function loadTeamSession(){
-  var sid = document.getElementById('teamSessionSelect').value;
+  var sel = document.getElementById('teamSessionSelect');
+  var sid = sel ? sel.value : '';
   var sess = sid ? state.sessions.find(function(x){ return x.id===sid; }) : null;
   var registered = sess ? (sess.registered||[]) : [];
 
-  // Pool: registered players if any, else all players
-  if(registered.length > 0){
-    selectedTeamPlayers = [...registered];
-  } else {
-    selectedTeamPlayers = state.players.map(function(p){ return p.id; });
-  }
+  // Set pool: registered if any, else all players
+  selectedTeamPlayers = registered.length > 0
+    ? [...registered]
+    : state.players.map(function(p){ return p.id; });
 
-  var count = state.players.filter(function(p){ return selectedTeamPlayers.includes(p.id); }).length;
+  // Display count — use registered.length directly from session data
+  var displayCount = registered.length > 0 ? registered.length
+    : state.players.length;
 
-  // Update player info panel
-  var infoEl = document.getElementById('teamPlayerInfo');
-  var countEl = document.getElementById('teamPlayerCount');
-  var chipsEl = document.getElementById('teamPlayerChips');
+  var infoEl    = document.getElementById('teamPlayerInfo');
+  var countEl   = document.getElementById('teamPlayerCount');
+  var chipsEl   = document.getElementById('teamPlayerChips');
   var suggestEl = document.getElementById('teamSuggestedMode');
 
-  var showCount = registered.length > 0 ? registered.length : state.players.length;
-  if(infoEl && (sid || showCount > 0)){
+  if(!infoEl) return;
+
+  if(sid && sess){
+    // Always show panel when a session is selected
     infoEl.style.display = 'block';
-    if(countEl) countEl.textContent = showCount;
+    if(countEl) countEl.textContent = displayCount;
 
-    // Auto-suggest mode based on player count
-    var suggested = _suggestMode(count);
-    state.teamMode = suggested;
+    // Suggest mode
+    var suggested = _suggestMode(displayCount);
+    if(state.teamBalance !== 'manual') state.teamMode = suggested;
     if(suggestEl){
-      var modeLabel = suggested === 'manual' ? '✋ Manuell' : '⚡ Vorgeschlagen: ' + suggested;
-      suggestEl.textContent = modeLabel;
+      suggestEl.textContent = displayCount > 0
+        ? '⚡ ' + suggested + ' empfohlen'
+        : '– keine Anmeldungen';
     }
 
-    // Show player chips
+    // Player chips — show names from registered IDs
     if(chipsEl){
-      var players = state.players.filter(function(p){ return selectedTeamPlayers.includes(p.id); });
-      chipsEl.innerHTML = players.map(function(p){
-        return '<span style="display:inline-flex;align-items:center;gap:5px;background:var(--surface2);border:1px solid var(--border);border-radius:16px;padding:3px 10px 3px 6px;font-size:12px;">'
-          + (p.photo ? '<img src="'+p.photo+'" style="width:18px;height:18px;border-radius:50%;object-fit:cover;">' : '<span style="display:inline-flex;width:18px;height:18px;border-radius:50%;background:var(--accent);align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#000;">'+p.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2)+'</span>')
-          + '<span>'+(p.nick||p.name.split(' ')[0])+'</span></span>';
-      }).join('');
+      var chips = '';
+      registered.forEach(function(pid){
+        var p = state.players.find(function(x){ return x.id===pid; });
+        var name = p ? (p.nick||p.name.split(' ')[0]) : pid.slice(0,6)+'…';
+        var initials = p ? p.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2) : '?';
+        chips += '<span style="display:inline-flex;align-items:center;gap:5px;background:var(--surface2);border:1px solid var(--border);border-radius:16px;padding:3px 10px 3px 6px;font-size:12px;">'
+          + (p&&p.photo ? '<img src="'+p.photo+'" style="width:18px;height:18px;border-radius:50%;object-fit:cover;">'
+              : '<span style="display:inline-flex;width:18px;height:18px;border-radius:50%;background:var(--accent);align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#000;">'+initials+'</span>')
+          + '<span>'+name+'</span></span>';
+      });
+      // If no registered but players exist, show all player count only
+      if(!chips && state.players.length > 0){
+        chips = '<span style="font-size:12px;color:var(--text3);">Alle '+state.players.length+' Spieler im Pool</span>';
+      }
+      chipsEl.innerHTML = chips;
     }
 
-    // If confirmed lineup exists, show it
-    if(sess && sess.confirmedLineup){
+    // Show confirmed lineup if exists
+    if(sess.confirmedLineup){
       _showConfirmedLineup(sess);
     } else {
-      // Hide old result
       var tr = document.getElementById('teamResult');
       if(tr) tr.style.display = 'none';
       var cs = document.getElementById('teamConfirmStatus');
       if(cs) cs.innerHTML = '';
     }
 
-    // If manual mode, open manual builder
-    if(suggested === 'manual' || state.teamBalance === 'manual'){
+    // If manual, open builder
+    if(state.teamBalance === 'manual'){
       var manSec = document.getElementById('manualTeamSection');
       if(manSec){ manSec.style.display='block'; _manualTeams={a:[],b:[],unassigned:[]}; _renderManualPool(); }
     }
-  } else if(infoEl){
-    infoEl.style.display = 'none';
+  } else {
+    // No session selected — show generic info
+    infoEl.style.display = state.players.length > 0 ? 'block' : 'none';
+    if(countEl) countEl.textContent = state.players.length;
+    if(suggestEl) suggestEl.textContent = state.players.length > 0 ? '⚡ '+_suggestMode(state.players.length)+' empfohlen' : '';
+    if(chipsEl) chipsEl.innerHTML = '<span style="font-size:12px;color:var(--text3);">Alle Spieler im Pool</span>';
+    selectedTeamPlayers = state.players.map(function(p){ return p.id; });
   }
 }
 
@@ -3199,26 +3215,34 @@ function setBalance(btn, balance){
 }
 
 function generateTeams(){
-  // Read registered players directly from session
-  var sid = document.getElementById('teamSessionSelect').value;
-  var sess = sid ? state.sessions.find(function(x){ return x.id===sid; }) : null;
-  var registered = sess ? (sess.registered||[]) : [];
-  console.log('[SR] generateTeams: sid='+sid+' sess='+(sess?sess.name:'null')+' registered='+JSON.stringify(registered)+' state.players='+state.players.length);
-  var poolIds = registered.length > 0 ? registered : state.players.map(function(p){ return p.id; });
+  // Get registered players directly from session
+  var sid2 = document.getElementById('teamSessionSelect').value;
+  var sess2 = sid2 ? state.sessions.find(function(x){ return x.id===sid2; }) : null;
+  var registered2 = sess2 ? (sess2.registered||[]) : [];
+
+  // Pool IDs
+  var poolIds = registered2.length > 0
+    ? registered2
+    : state.players.map(function(p){ return p.id; });
   selectedTeamPlayers = poolIds;
 
-  // Auto-detect mode from player count if needed
-  var suggested = _suggestMode(poolIds.length);
-  if(!state.teamMode || state.teamMode === 'manual') state.teamMode = suggested;
-  var parts = state.teamMode.split('v');
+  // Mode: use suggested if current is invalid/manual
+  var modeToUse = state.teamMode;
+  if(!modeToUse || modeToUse==='manual' || modeToUse.indexOf('v')<0){
+    modeToUse = _suggestMode(poolIds.length);
+    state.teamMode = modeToUse;
+  }
+  var parts = modeToUse.split('v');
   var sizeA = parseInt(parts[0]);
-  var sizeB = parseInt(parts[1] || parts[0]);
+  var sizeB = parseInt(parts[1]||parts[0]);
   if(isNaN(sizeA)||isNaN(sizeB)){
-    state.teamMode = suggested;
-    parts = suggested.split('v');
+    modeToUse = _suggestMode(poolIds.length);
+    state.teamMode = modeToUse;
+    parts = modeToUse.split('v');
     sizeA = parseInt(parts[0]); sizeB = parseInt(parts[1]||parts[0]);
   }
   var total = sizeA + sizeB;
+
   var pool = state.players.filter(function(p){ return poolIds.includes(p.id); });
 
   if(pool.length < total){
