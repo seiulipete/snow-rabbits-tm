@@ -3,7 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>GDSF · Guest Check-In</title>
+<title>GDSF · Guest Check-In v2.1</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1393,20 +1396,27 @@ function genMagicCode(inputId) {
 
 function doLogout() {
   if (!confirm('Wirklich abmelden?')) return;
+  // Clear timers first
+  if (dashboardTimer) { clearInterval(dashboardTimer); dashboardTimer = null; }
+  // Reset state
   sessionStorage.removeItem('gdsf_user');
   localStorage.removeItem('gdsf_offline_queue');
   currentUser = null;
   currentEventId = null;
   allGuests = [];
   events = [];
-  if (dashboardTimer) { clearInterval(dashboardTimer); dashboardTimer = null; }
-  // Reset tabs
+  // Reset UI: hide app, show login
   document.getElementById('app').classList.remove('visible');
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('login-user').value = '';
   document.getElementById('login-pass').value = '';
+  // Reset tabs for next login
   document.getElementById('tab-admin-btn').style.display = 'none';
-  switchTab('checkin');
+  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', i===0));
+  document.getElementById('view-checkin').style.display = 'flex';
+  document.getElementById('view-dashboard').style.display = 'none';
+  document.getElementById('view-admin').style.display = 'none';
+  document.getElementById('view-admin').classList.remove('active');
 }
 
 // ── SHOW APP ─────────────────────────────────
@@ -1430,7 +1440,7 @@ async function showApp() {
 
 // ── EVENTS ───────────────────────────────────
 async function loadEvents() {
-  events = await get('events?order=event_date.desc&select=*') || [];
+  events = await get('events?order=sort_order.asc,event_date.desc&select=*') || [];
   renderEventPills();
   if (events.length > 0) {
     selectEvent(events[0].id);
