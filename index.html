@@ -784,7 +784,8 @@ body.admin-mode .player-grid .admin-only{display:flex;}
 
 const SUPABASE_URL = 'https://cxkpwvnpzbweiqndeknr.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN4a3B3dm5wemJ3ZWlxbmRla25yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNDE1NDAsImV4cCI6MjA4OTkxNzU0MH0.3wF_D27okKvBgBJOisxOld7bBK-Mvivc-hxYTLLiZo8';
-let ADMIN_PW = localStorage.getItem('sr_admin_pw') || 'rabbits123';
+let ADMIN_PW = localStorage.getItem('sr_admin_pw') || 'AleOli0515!';
+  if(!localStorage.getItem('sr_admin_pw')) localStorage.setItem('sr_admin_pw', 'AleOli0515!');
 
 const DEFAULT_FOLDERS = [
   {id:'f1',name:'Senioren',icon:'🏀'},
