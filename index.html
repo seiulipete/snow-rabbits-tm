@@ -1282,10 +1282,28 @@ function _resetAttempts(){
 }
 
 // Restore lock from sessionStorage on page load
+// Restore lock from sessionStorage on page load + emergency reset via ?resetlock
 (function(){
   try{
-    var stored = sessionStorage.getItem('sr_lock');
-    if(stored){ _loginLockUntil = parseInt(stored); }
+    if(new URLSearchParams(window.location.search).has('resetlock')){
+      sessionStorage.removeItem('sr_lock');
+      _loginAttempts = 0; _loginLockUntil = 0;
+      // Clean URL
+      var clean = window.location.pathname + window.location.search.replace(/[?&]?resetlock/,'').replace(/^&/,'?');
+      history.replaceState(null,'', clean || window.location.pathname);
+      // Notify user
+      setTimeout(function(){ showToast('🔓 Login-Sperre zurückgesetzt!', 'green'); }, 500);
+    } else {
+      var stored = sessionStorage.getItem('sr_lock');
+      if(stored){
+        var lockVal = parseInt(stored);
+        if(lockVal > Date.now()){
+          _loginLockUntil = lockVal;
+        } else {
+          sessionStorage.removeItem('sr_lock');
+        }
+      }
+    }
   }catch(e){}
 })();
 
