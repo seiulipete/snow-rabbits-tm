@@ -784,8 +784,7 @@ body.admin-mode .player-grid .admin-only{display:flex;}
 
 const SUPABASE_URL = 'https://cxkpwvnpzbweiqndeknr.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN4a3B3dm5wemJ3ZWlxbmRla25yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNDE1NDAsImV4cCI6MjA4OTkxNzU0MH0.3wF_D27okKvBgBJOisxOld7bBK-Mvivc-hxYTLLiZo8';
-let ADMIN_PW = localStorage.getItem('sr_admin_pw') || 'AleOli0515!';
-  if(!localStorage.getItem('sr_admin_pw')) localStorage.setItem('sr_admin_pw', 'AleOli0515!');
+let ADMIN_PW = 'AleOli0515!';
 
 const DEFAULT_FOLDERS = [
   {id:'f1',name:'Senioren',icon:'🏀'},
@@ -870,7 +869,7 @@ function applyData(d){
   state.moderators = d.moderators || state.moderators;
   state.folders    = d.folders    || DEFAULT_FOLDERS;
   state.filters    = d.filters    || DEFAULT_FILTERS;
-  if(d.adminPw){ ADMIN_PW=d.adminPw; localStorage.setItem('sr_admin_pw',d.adminPw); }
+  // adminPw is now code-only — not synced from cloud to prevent lockouts
   if(d.updatedAt) lastSyncTs = d.updatedAt;
   // Recalculate dynamic ratings
   state.players.forEach(p=>{ p.overall=calcOverall(p); });
@@ -1247,10 +1246,48 @@ function _clearInactivityTimer(){
 
 // ── ADMIN SECURITY: Brute-Force, Session Timeout, Login Notification ─────────
 
-// ── 1. Brute-Force Protection — DISABLED ─────────────────────────────────────
-function _checkBruteForce(){ return true; }
-function _recordFailedAttempt(){}
-function _resetAttempts(){}
+// ── 1. Brute-Force Protection ────────────────────────────────────────────────
+var _loginAttempts = 0;
+var _loginLockUntil = 0;
+var MAX_ATTEMPTS = 5;
+var LOCK_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+
+function _checkBruteForce(){
+  var now = Date.now();
+  if(_loginLockUntil > now){
+    var remaining = Math.ceil((_loginLockUntil - now) / 1000);
+    var mins = Math.floor(remaining / 60);
+    var secs = remaining % 60;
+    showToast('🔒 Zu viele Versuche. Bitte warten: ' + mins + ':' + (secs<10?'0':'')+secs, 'red');
+    return false;
+  }
+  return true;
+}
+
+function _recordFailedAttempt(){
+  _loginAttempts++;
+  if(_loginAttempts >= MAX_ATTEMPTS){
+    _loginLockUntil = Date.now() + LOCK_DURATION_MS;
+    _loginAttempts = 0;
+    showToast('🔒 ' + MAX_ATTEMPTS + ' Fehlversuche – Login für 5 Min. gesperrt!', 'red');
+    // Persist lock in sessionStorage so refresh doesn't bypass it
+    try{ sessionStorage.setItem('sr_lock', _loginLockUntil.toString()); }catch(e){}
+  }
+}
+
+function _resetAttempts(){
+  _loginAttempts = 0;
+  _loginLockUntil = 0;
+  try{ sessionStorage.removeItem('sr_lock'); }catch(e){}
+}
+
+// Restore lock from sessionStorage on page load
+(function(){
+  try{
+    var stored = sessionStorage.getItem('sr_lock');
+    if(stored){ _loginLockUntil = parseInt(stored); }
+  }catch(e){}
+})();
 
 // ── 2. Session Timeout ────────────────────────────────────────────────────────
 var SESSION_TIMEOUT_MS = 4 * 60 * 60 * 1000; // 4 hours
@@ -2463,7 +2500,7 @@ function changeAdminPassword(){
   const msg=document.getElementById('adminPwMsg');
   if(!p1||p1.length<4){ msg.style.color='#fb923c'; msg.textContent='Mindestens 4 Zeichen!'; return; }
   if(p1!==p2){ msg.style.color='var(--danger)'; msg.textContent='Passwörter stimmen nicht überein!'; return; }
-  ADMIN_PW=p1; localStorage.setItem('sr_admin_pw',p1);
+  ADMIN_PW=p1;
   document.getElementById('newAdminPw1').value='';
   document.getElementById('newAdminPw2').value='';
   msg.style.color='var(--accent3)'; msg.textContent='✅ Passwort geändert!';
